@@ -6,6 +6,9 @@ using UnityEngine.SceneManagement;
 public class DeathTrigger : MonoBehaviour {
 	// ----------------------------------- Fields and Properties ----------------------------------- //
 
+	// The Player GO
+	GameObject Player;
+
 
 	//  --------- Serialized Fields: Set in Inspector ---------  //
 
@@ -13,13 +16,13 @@ public class DeathTrigger : MonoBehaviour {
 	// ------------------------------------------ Methods ------------------------------------------ //
 	//  --------- Start ---------  //
 	void Start () {
-
+		Player = GameObject.FindWithTag("Player");
 	}
 	
 	//  --------- OnTriggerEnter2D ---------  //
 	void OnTriggerEnter2D(Collider2D col) {
-		if(col.gameObject.tag == "Player") {
-			col.gameObject.GetComponent<PlayerNetwork>().CmdRespawn();
+		if(col.gameObject == Player) {
+			SceneManager.LoadScene(SceneManager.GetActiveScene().name);
 		}
 	}
 }

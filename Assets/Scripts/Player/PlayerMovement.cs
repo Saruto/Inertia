@@ -7,41 +7,17 @@ public class PlayerMovement : MonoBehaviour {
 	// ----------------------------------- Fields and Properties ----------------------------------- //
 	// Player Rigidbody + Other Script Components
 	Rigidbody2D rb;
-	PlayerUmbrella umbrella;
-	DistanceJoint2D HookJoint;
 
 	// --------- Control Variables --------- //
 	// Can the player stop the y velocity of their jump? This only becomes true a few frames after a jump.
 	// The player can't stop their y velocity unless they actually jumped themselves first
 	bool canStopJump = false;
 
-	// Stops capping the H speed after going off the hook
-	bool justJumpedOffHook = false;
-
-	// --------- Wall Jumping/Clinging --------- //
-	// Is the player currently clinging onto a wall?
-	bool isOnWall = false;
-	// Is/Was the player most recently on a left facing wall? or a right facing wall?
-	bool wasOnLeftWall = false;
-	bool wasOnRightWall = false;
-	// Can the player wall jump? This stays true for a few frames after the player leaves a wall.
-	bool canWallJump = false;
-
 	// --------- Other Movement --------- //
-	// The initial gravity scale of the player.
-	float gravityScale;
-
 	// The force applied for left and right movement.
 	Vector2 ForceToApply = Vector2.zero;
-
-	// True if the player's in a wind effector
-	bool inWindEffector = false;
 	
 	//  --------- Serialized Fields: Set in Inspector ---------  //
-	// The various edge detectors on the player.
-	[SerializeField] PlayerEdgeDetector LeftDetector;
-	[SerializeField] PlayerEdgeDetector RightDetector;
-	[SerializeField] PlayerEdgeDetector FloorDetector;
 
 	// Player movement constants
 	[SerializeField] float RunningForce;
@@ -49,103 +25,35 @@ public class PlayerMovement : MonoBehaviour {
 	[SerializeField] float RunningTopSpeed;
 
 
-
 	// ------------------------------------------ Methods ------------------------------------------ //
 	//  --------- Start ---------  //
 	void Start () {
 		rb = GetComponent<Rigidbody2D>();
-		umbrella = GetComponent<PlayerUmbrella>();
-		HookJoint = GetComponent<DistanceJoint2D>();
-		gravityScale = rb.gravityScale;
 	}
 	
 	//  --------- Update ---------  //
 	void Update () {
-		if(umbrella.isUmbrellaHookOpen) {
-			GrapplingHookMovement();
-		} else if(umbrella.isUmbrellaOpen) {
-			UmbrellaMovement();
-		} else {
-			NormalMovement();
-		}
+		NormalMovement();
 	}
 
 	//  --------- Normal Movement State ---------  //
 	void NormalMovement() {
-		hooklength_change = Vector2.zero;
 		// --- Jumping --- //
 		JumpingHandler();
 		JumpStifleHandler();
 		// --- Left and Right Movement --- //
 		GroundMovement();
-		// --- Wall Clinging --- //
-		WallClingingHandler();
-		// --- Wall Jumping --- //
-		WallJumpingHandler();
-		if(wall_jump_stifle_special_active) WallJumpStifleHandler();
 	}
 
 	//  --------- Umbrella Movement State ---------  //
 	void UmbrellaMovement() {
 		canStopJump = false;
-		hooklength_change = Vector2.zero;
 		// --- Jumping --- //
 		JumpingHandler();
-		if(!inWindEffector) { JumpStifleHandler(); }
 		// --- Left and Right Movement --- //
 		GroundMovement();
-		// Other
-		rb.gravityScale = gravityScale;
-		isOnWall = false;
 	}
 
-	//  --------- Grappling Hook Movement State ---------  //
-	void GrapplingHookMovement() {
-		canStopJump = false;	// make sure the player can't stop their jump after hooking
-		// Swinging Motion
-		if(Input.GetKey(KeyCode.A) || Input.GetKey(KeyCode.D)) {
-			Vector2 force;
-			// direction vectors are perpendicular to the vector from the hook to the player. decrease the force as we get closer to the top
-			if(Input.GetKey(KeyCode.A)) {
-				Vector2 dir = umbrella.HookPlayerPerpendicularClockwise();
-				force = dir * umbrella.HookSwingForce;
-				// sinVal ranges from 0 to 1. we do this instead of using dir.x (also ranges from 0 to 1) to get a steeper rise
-				float sinVal = Mathf.Sin(dir.x * Mathf.PI / 2);
-				force *= Mathf.Abs(Mathf.Min(sinVal, 0f));
-			} else {
-				Vector2 dir = umbrella.HookPlayerPerpendicularCounterClockwise();
-				force = dir * umbrella.HookSwingForce;
-				float sinVal = Mathf.Sin(dir.x * Mathf.PI / 2);
-				force *= Mathf.Max(sinVal, 0f);
-			}
-			// reduce the force further, or cap the velocity if it's too high.
-			if(rb.velocity.sqrMagnitude > 30*30) {
-				rb.velocity = rb.velocity.normalized * 30;
-				ForceToApply = Vector2.zero;
-			} else if(rb.velocity.sqrMagnitude > 20*20) {
-				ForceToApply = force / (rb.velocity.magnitude - 19);
-			} else {
-				ForceToApply = force;
-			}
-
-		} else {
-			ForceToApply = Vector2.zero;
-		}
-		// Changing Hook Length
-		if(Input.GetKey(KeyCode.W) || Input.GetKey(KeyCode.S)) {
-			Vector2 dir;
-			if(Input.GetKey(KeyCode.W)) {	// Up
-				dir = (HookJoint.connectedAnchor - (Vector2)transform.position).normalized;
-			} else {   // Down
-				dir = ((Vector2)transform.position - HookJoint.connectedAnchor).normalized;
-			}
-			hooklength_change = dir * 6 * Time.deltaTime;
-		} else {
-			hooklength_change = Vector2.zero;
-		}
-	}
-
-	Vector2 hooklength_change = Vector2.zero;
 
 	//  --------- FixedUpdate ---------  //
 	void FixedUpdate() {
@@ -153,14 +61,7 @@ public class PlayerMovement : MonoBehaviour {
 		if(ForceToApply != Vector2.zero) {
 			rb.AddForce(ForceToApply);
 		}
-		if(hooklength_change != Vector2.zero) {
-			transform.Translate(hooklength_change);
-		}
 	}
-
-
-
-
 
 	//  --------- State Functions ---------  //
 	void JumpingHandler() {
@@ -214,7 +115,6 @@ public class PlayerMovement : MonoBehaviour {
 					rb.gravityScale = gravityScale / 6f;
 					canWallJump = true;
 					isOnWall = true;
-					wall_jump_stifle_special_active = false;
 					if((LeftDetector.isTouching && Input.GetKey(KeyCode.A))) {
 						wasOnLeftWall = true; wasOnRightWall = false;
 					} else { 
@@ -224,7 +124,6 @@ public class PlayerMovement : MonoBehaviour {
 			}
 			// In the air and not wall clinging.
 			else {
-				// If this was the 1st frame where we're not on the wall anymore.
 				if(isOnWall) {
 					StartCoroutine(WallJumpWindow());
 				}
@@ -245,31 +144,7 @@ public class PlayerMovement : MonoBehaviour {
 			} else{
 				rb.AddForce((Vector2.up + Vector2.left).normalized * JumpingForce * 1.5f, ForceMode2D.Impulse);
 			}
-			// Handles special case where player stifles a walljump (glass cieling is vertical instead of horizontal in this case)
-			if(wasOnLeftWall && Input.GetKey(KeyCode.A) || wasOnRightWall && Input.GetKey(KeyCode.D)) {
-				canStopJump = false;
-				wall_jump_stifle_special_active = true;
-			} else if(!umbrella.isUmbrellaOpen) {
-				wall_jump_stifle_special_active = false;
-				canStopJump = true;
-			}
-		}
-	}
-
-	// Handles what happens when the player is holding towards the wall and stifles their jump (stops holding space) early.
-	bool wall_jump_stifle_special_active = false;
-	void WallJumpStifleHandler() {
-		// turns itself off
-		if(FloorDetector.isTouching) {
-			wall_jump_stifle_special_active = false;
-			canStopJump = true;
-		} else if(Input.GetKeyUp(KeyCode.Space) && (wasOnLeftWall && Input.GetKey(KeyCode.A) || wasOnRightWall && Input.GetKey(KeyCode.D))) {
-			rb.velocity = new Vector2(0f, rb.velocity.y);
-			// this extra push simulates the JumpStifleHandler code, making sharp jumps over ledges possible
-			if(rb.velocity.y > 5){	// don't want to add the force if we're already slow in the y direction
-				if(wasOnLeftWall) rb.AddForce((Vector2.down + 1.5f*Vector2.left).normalized * JumpingForce * 0.5f, ForceMode2D.Impulse);
-				else rb.AddForce((Vector2.down + 1.5f*Vector2.right).normalized * JumpingForce * 0.5f, ForceMode2D.Impulse);
-			}
+			if(!umbrella.isUmbrellaOpen) canStopJump = true;
 		}
 	}
 
@@ -301,7 +176,7 @@ public class PlayerMovement : MonoBehaviour {
 	// Allows the player to wall jump for a few moments after leaving the wall.
 	IEnumerator WallJumpWindow() {
 		yield return new WaitForSeconds(0.15f);
-		if(!isOnWall) canWallJump = false;	// if statement handles case where we quickly retouch a wall
+		canWallJump = false;
 	}
 
 	//  --------- OnTriggerEnter2D ---------  //

@@ -1,9 +1,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Networking;
 
-public class PlayerUmbrella : NetworkBehaviour {
+public class PlayerUmbrella : MonoBehaviour {
 	// ----------------------------------- Fields and Properties ----------------------------------- //
 	
 	// Player Rigidbody + Other Components
@@ -58,34 +57,48 @@ public class PlayerUmbrella : NetworkBehaviour {
 
 	//  --------- Update ---------  //
 	void Update() {
-		if(isLocalPlayer) {
-			// --- Umbrella Opening and Closing--- //
-			if(Input.GetMouseButtonDown(0) && !isUmbrellaHookOpen) {
-				CmdUmbrellaToggle();
-			}
+		// --- Umbrella Opening and Closing--- //
+		if(Input.GetMouseButtonDown(0) && !isUmbrellaHookOpen) {
+			isUmbrellaOpen = !isUmbrellaOpen;
 			if(isUmbrellaOpen) {
-				if(rb.velocity.y < UmbrellaFallingTopSpeed) {
-					rb.velocity = new Vector2(rb.velocity.x, UmbrellaFallingTopSpeed);
-
-				}
-			}
-
-
-			// --- Umbrella Hook --- //
-			// Hooking
-			if(Input.GetMouseButtonDown(1) && !isUmbrellaHookOpen) {
-				CmdTryHookshot(transform.position, Camera.main.ScreenToWorldPoint(Input.mousePosition));
-			}
-			// Releasing
-			else if((Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Space)) && isUmbrellaHookOpen) {
-				CmdReleaseHookshot();
-			}
-			// Update the hook graphic if open
-			if(isUmbrellaHookOpen) {
-				HookGraphic.SetPositions(new Vector3[]{ transform.position, HookJoint.connectedAnchor });
-				CmdUpdateHookshotGraphic();
+				UmbrellaSprite.SetActive(true);
+			} else {
+				UmbrellaSprite.SetActive(false);
 			}
 		}
+		if(isUmbrellaOpen) {
+			if(rb.velocity.y < UmbrellaFallingTopSpeed) {
+				rb.velocity = new Vector2(rb.velocity.x, UmbrellaFallingTopSpeed);
+
+			}
+		}
+
+
+		// --- Umbrella Hook --- //
+		// Hooking
+		if(Input.GetMouseButtonDown(1) && !isUmbrellaHookOpen) {
+			if(MouseIsOverHookableTarget()) {
+				isUmbrellaHookOpen = true;
+				HookJoint.connectedAnchor = GetConnectedAnchorPoint();
+				HookJoint.enabled = true;
+				HookGraphic.enabled = true;
+				// close the umbrella
+				isUmbrellaOpen = false;
+				UmbrellaSprite.SetActive(false);
+			}
+		}
+		// Releasing
+		else if((Input.GetMouseButtonDown(1) || Input.GetKeyDown(KeyCode.Space)) && isUmbrellaHookOpen) {
+			isUmbrellaHookOpen = false;
+			playerMovement.UncapHSpeedUntilOnGround();
+			HookJoint.enabled = false;
+			HookGraphic.enabled = false;
+		}
+		// Update the hook graphic if open
+		if(isUmbrellaHookOpen) {
+			HookGraphic.SetPositions(new Vector3[]{ transform.position, HookJoint.connectedAnchor });
+		} 
+
 
 
 
@@ -95,7 +108,6 @@ public class PlayerUmbrella : NetworkBehaviour {
 	}
 
 	//  --------- Helper Functions ---------  //
-	/*
 	// Returns true if we sucessfully grabbed something.
 	bool MouseIsOverHookableTarget(){
 		switch(HookTarget) {
@@ -119,7 +131,6 @@ public class PlayerUmbrella : NetworkBehaviour {
 		}
 		throw new System.Exception();
 	}
-	*/
 
 	//  --------- Public Functions ---------  //
 	// Returns the swing direction vector when on a hook
@@ -132,78 +143,4 @@ public class PlayerUmbrella : NetworkBehaviour {
 		return new Vector2(hookToPlayer.y, -hookToPlayer.x).normalized;
 	}
 
-
-
-
-	//  --------- Network Functions ---------  //
-	// Opens the umbrella for this player on all clients
-	[Command]
-	void CmdUmbrellaToggle() {
-		RpcUmbrellaToggle();
-	}
-	[ClientRpc]
-	void RpcUmbrellaToggle() {
-		isUmbrellaOpen = !isUmbrellaOpen;
-		if(isUmbrellaOpen) {
-			UmbrellaSprite.SetActive(true);
-		} else {
-			UmbrellaSprite.SetActive(false);
-		}
-	}
-
-	// Handle the hookshot visuals for this player on all clients.
-	[Command]
-	void CmdTryHookshot(Vector3 position, Vector3 screenToWorldPoint) {
-		// Check to see if the client is hovering over a clickable target
-		bool isOver = false;
-		Vector2 anchorPoint = new Vector2();
-		switch(HookTarget) {
-		case HookType.Anywhere:
-			isOver = true;
-			anchorPoint = screenToWorldPoint;
-			break;
-		case HookType.CollidersOnly:
-			RaycastHit2D hit = Physics2D.Raycast(position, screenToWorldPoint - position, HookMaxLength);
-			isOver = hit.collider != null && !hit.collider.isTrigger;
-			anchorPoint = hit.point;
-			break;
-		}
-		if(isOver) {
-			RpcThrowHookshot(anchorPoint);
-		}
-	}
-
-	[ClientRpc]
-	void RpcThrowHookshot(Vector2 point) {
-		isUmbrellaHookOpen = true;
-		HookJoint.connectedAnchor = point;
-		HookJoint.enabled = true;
-		HookGraphic.enabled = true;
-		HookGraphic.SetPositions(new Vector3[]{ transform.position, point });
-		// close the umbrella
-		isUmbrellaOpen = false;
-		UmbrellaSprite.SetActive(false);
-	}
-
-	[Command]
-	void CmdReleaseHookshot() {
-		RpcReleaseHookshot();
-	}
-	[ClientRpc]
-	void RpcReleaseHookshot() {
-		isUmbrellaHookOpen = false;
-		playerMovement.UncapHSpeedUntilOnGround();
-		HookJoint.enabled = false;
-		HookGraphic.enabled = false;
-	}
-
-	[Command]
-	void CmdUpdateHookshotGraphic() {
-		RpcUpdateHookshotGraphic();
-	}
-	[ClientRpc]
-	void RpcUpdateHookshotGraphic() {
-		if(!isLocalPlayer)
-			HookGraphic.SetPositions(new Vector3[]{ transform.position, HookJoint.connectedAnchor });
-	}
 }
